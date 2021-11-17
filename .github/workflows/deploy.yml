@@ -1,4 +1,5 @@
 name: cicd-demo
+
 on:
   push:
     branches:
@@ -30,8 +31,8 @@ jobs:
 
       - name: 'Build and push'
         run: |
-          docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/docker-react .
-          docker push ${{ secrets.DOCKERHUB_USERNAME}}/docker-react
+          docker build -t ${{ secrets.DOCKERHUB_USERNAME }}/hello-react .
+          docker push ${{ secrets.DOCKERHUB_USERNAME}}/hello-react
       - name: 'Write config'
         run: |
           mkdir ~/.oci
@@ -64,15 +65,33 @@ jobs:
             --query "data [0].id" \
             --raw-output \
             )" >> $GITHUB_ENV
+      - name: 'Create Instance'
+        if: ${{!env.INSTANCE_OCID}}
+        run: |
+          echo "INSTANCE_OCID=$( \
+            oci compute instance launch \
+            -c ${{secrets.VM_COMPARTMENT_OCID}} \
+            --availability-domain ${{secrets.VM_AVAILABILITY_DOMAIN}} \
+            --shape ${{secrets.VM_SHAPE}} \
+            --shape-config '{"memoryInGBs": 1, "ocpus": 1}' \
+            --assign-public-ip true \
+            --display-name cicd-demo \
+            --image-id ${{secrets.VM_CUSTOM_IMAGE_OCID}} \
+            --ssh-authorized-keys-file /home/runner/.oci/oci_api_key_public.pem \
+            --subnet-id ${{secrets.VM_SUBNET_OCID}} \
+            --wait-for-state RUNNING \
+            --query "data.id" \
+            --raw-output \
+            )" >> $GITHUB_ENV
       - name: 'Get Instance IP'
         run: |
           echo "INSTANCE_IP=$( \
             oci compute instance list-vnics \
-            --instance-id ${{secrets.INSTANCE_OCID}} \
+            --instance-id ${{env.INSTANCE_OCID}} \
             --query 'data [0]."public-ip"' \
             --raw-output \
             )" >> $GITHUB_ENV
-          echo Instance IP: ${{ secrets.INSTANCE_IP }}
+          echo Instance IP: ${{ env.INSTANCE_IP }}
       - name: 'Wait for SSH'
         run: |
           while ! nc -w5 -z ${{ env.INSTANCE_IP }} 22; do
